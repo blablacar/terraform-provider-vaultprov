@@ -1,0 +1,9 @@
+.idea/
+*.iml
+bin/
+terraform-provider-vaultprov
+main.tf
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate*
+dist/
