@@ -1,4 +1,4 @@
-module github.com/blablacar/terraform-provider-vaultsecret
+module github.com/blablacar/terraform-provider-vaultprov
 
 go 1.20
 

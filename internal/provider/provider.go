@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
-	vaultapi "github.com/blablacar/terraform-provider-vaultsecret/internal/vault"
+	vaultapi "github.com/blablacar/terraform-provider-vaultprov/internal/vault"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"

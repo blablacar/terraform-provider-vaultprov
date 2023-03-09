@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/blablacar/terraform-provider-vaultsecret/internal/provider"
+	"github.com/blablacar/terraform-provider-vaultprov/internal/provider"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
