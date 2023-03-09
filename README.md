@@ -1,4 +1,4 @@
-# Terraform Provider vaultsecret
+# Terraform Provider vaultprov
 
 `blablacar/vaultprov` is a custom provider to generate and store random secrets directly into Vault without storing any sensitive value into Terraform state. Secrets metadata are still stored into Terraform state as for any other resources, only the secret itself isn't.
 
