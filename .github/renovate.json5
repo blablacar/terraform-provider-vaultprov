@@ -1,0 +1,10 @@
+{
+  "packageRules": [
+    {
+      "groupName": "golang",
+      "matchDatasources": [
+        "go"
+      ]
+    }
+  ]
+}
