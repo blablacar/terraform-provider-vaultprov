@@ -14,7 +14,7 @@ const (
 
 type Secret struct {
 	Path     string
-	Data     map[string]string
+	Data     map[string]interface{}
 	Metadata map[string]string
 }
 
@@ -119,7 +119,7 @@ func (c *VaultApi) ReadSecret(secretPath string) (*Secret, error) {
 		customMetadata[k] = v.(string)
 	}
 
-	data := secret.Data[SecretDataField].(map[string]string)
+	data := secret.Data[SecretDataField].(map[string]interface{})
 
 	vaultSecret := &Secret{
 		Path:     secretPath,
@@ -147,13 +147,8 @@ func (c *VaultApi) UpdateSecretMetadata(secretPath string, metadata map[string]s
 		return fmt.Errorf("missing custom metadata")
 	}
 
-	currentMetadata := secretMetadata.Data[SecretCustomDataField].(map[string]interface{})
-
 	// Update secret's metadata from plan (only metadata can be changed)
 	updatedMetadata := make(map[string]string)
-	for k, v := range currentMetadata {
-		updatedMetadata[k] = v.(string)
-	}
 
 	for k, v := range metadata {
 		updatedMetadata[k] = v

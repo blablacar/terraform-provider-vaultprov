@@ -9,7 +9,7 @@ import (
 )
 
 // Provider documentation generation.
-//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate --provider-name vaultsecret
+//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate --provider-name vaultprov
 
 const providerUrl = "registry.terraform.io/blablacar/vaultprov"
 

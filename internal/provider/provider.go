@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	vaultapi "github.com/blablacar/terraform-provider-vaultprov/internal/vault"
-
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -12,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	vault "github.com/hashicorp/vault/api"
-	auth "github.com/hashicorp/vault/api/auth/kubernetes"
 )
 
 const providerName = "vaultprov"
@@ -25,9 +23,9 @@ type vaultSecretProvider struct {
 
 // Provider schema struct
 type providerModel struct {
-	Address types.String      `tfsdk:"address"`
-	Token   types.String      `tfsdk:"token"`
-	Auth    providerAuthModel `tfsdk:"auth"`
+	Address types.String       `tfsdk:"address"`
+	Token   types.String       `tfsdk:"token"`
+	Auth    *providerAuthModel `tfsdk:"auth"`
 }
 
 type providerAuthModel struct {
@@ -40,75 +38,6 @@ func New() func() provider.Provider {
 	return func() provider.Provider {
 		return &vaultSecretProvider{}
 	}
-}
-
-func (p *vaultSecretProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var config providerModel
-	diags := req.Config.Get(ctx, &config)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	vaultConf := vault.DefaultConfig()
-	vaultConf.Address = config.Address.ValueString()
-
-	client, err := vault.NewClient(vaultConf)
-	if err != nil {
-		tflog.Error(ctx, "Error creating vault client", map[string]interface{}{"address": vaultConf.Address, "error": err})
-		resp.Diagnostics.AddError(
-			"Error configuring provider",
-			fmt.Sprintf("Can't create vault client for %s: %s", vaultConf.Address, err.Error()),
-		)
-		return
-	}
-
-	if !config.Token.IsNull() {
-		client.SetToken(config.Token.ValueString()) //DEBUG
-		tflog.Warn(ctx, "Auth token provided. Ignoring other auth parameters. FOR DEBUG ONLY, DO NOT USE IN PRODUCTION.", nil)
-
-		p.vaultApi = vaultapi.NewVaultApi(client)
-		resp.ResourceData = p.vaultApi
-		return
-	}
-
-	role := config.Auth.Role.ValueString()
-	jwt := config.Auth.Jwt.ValueString()
-
-	k8sAuth, err := auth.NewKubernetesAuth(
-		role,
-		auth.WithServiceAccountToken(jwt),
-	)
-	if err != nil {
-		tflog.Error(ctx, "Error initializing Vault kubernetes auth method", map[string]interface{}{"role": role, "jwt": jwt, "error": err})
-		resp.Diagnostics.AddError(
-			"Error configuring provider",
-			fmt.Sprintf("Unable to initialize Vault Kubernetes authentication with role %s and JWT %s: %s", role, jwt, err.Error()),
-		)
-		return
-	}
-
-	authInfo, err := client.Auth().Login(context.Background(), k8sAuth)
-	if err != nil {
-		tflog.Error(ctx, "Error login in with Vault kubernetes auth method", map[string]interface{}{"role": role, "jwt": jwt, "error": err})
-		resp.Diagnostics.AddError(
-			"Error configuring provider",
-			fmt.Sprintf("Unable to log in with Vault Kubernetes authentication with role %s and JWT %s: %s", role, jwt, err.Error()),
-		)
-		return
-	}
-
-	if authInfo == nil {
-		tflog.Error(ctx, "Not auth info returned for kubernetes auth", map[string]interface{}{"role": role, "jwt": jwt})
-		resp.Diagnostics.AddError(
-			"Error configuring provider",
-			fmt.Sprintf("Not auth info returned for kubernetes auth with role %s and JWT %s: %s", role, jwt, err.Error()),
-		)
-		return
-	}
-
-	p.vaultApi = vaultapi.NewVaultApi(client)
-	resp.ResourceData = p.vaultApi
 }
 
 func (p *vaultSecretProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -156,4 +85,68 @@ func (p *vaultSecretProvider) Schema(ctx context.Context, req provider.SchemaReq
 		},
 		MarkdownDescription: "A provider to generate secrets and have them stored directly into Vault without any copy in the Terraform State.  Once the secret has been generated, its value only exist into Vault. Terraform will not track any change in the value, only in the secret attribute (`metadata`, etc.`).",
 	}
+}
+
+func (p *vaultSecretProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	var config providerModel
+	diags := req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	vaultConf := vault.DefaultConfig()
+	vaultConf.Address = config.Address.ValueString()
+
+	client, err := vault.NewClient(vaultConf)
+	if err != nil {
+		tflog.Error(ctx, "Error creating vault client", map[string]interface{}{"address": vaultConf.Address, "error": err})
+		resp.Diagnostics.AddError(
+			"Error configuring provider",
+			fmt.Sprintf("Can't create vault client for %s: %s", vaultConf.Address, err.Error()),
+		)
+		return
+	}
+
+	authConf := config.Auth
+	if !config.Token.IsNull() {
+		client.SetToken(config.Token.ValueString()) //DEBUG
+		tflog.Warn(ctx, "Auth token provided. Ignoring other auth parameters. FOR DEBUG ONLY, DO NOT USE IN PRODUCTION.", nil)
+	} else if authConf != nil {
+		err = setupVaultClientAuth(client, authConf)
+		if err != nil {
+			tflog.Error(ctx, "Error while configuring vault client auth", map[string]interface{}{"address": vaultConf.Address, "error": err})
+			resp.Diagnostics.AddError(
+				"Error configuring provider",
+				fmt.Sprintf("Can't create vault client for %s: %s", vaultConf.Address, err.Error()),
+			)
+		}
+	}
+
+	p.vaultApi = vaultapi.NewVaultApi(client)
+	resp.ResourceData = p.vaultApi
+}
+
+func setupVaultClientAuth(client *vault.Client, authConf *providerAuthModel) error {
+	role := authConf.Role.ValueString()
+	jwt := authConf.Jwt.ValueString()
+
+	//We don't use auth.NewKubernetesAuth in order to have the same input parameters as the official Vault provider
+	// (otherwise 'path' would have to be replaced by 'mount')
+	loginData := map[string]interface{}{
+		"jwt":  jwt,
+		"role": role,
+	}
+
+	path := authConf.Path.ValueString()
+	authInfo, err := client.Logical().Write(path, loginData)
+	if err != nil {
+		return fmt.Errorf("unable to log in with Vault Kubernetes authentication with role %s and JWT %s: %w", role, jwt, err)
+	}
+
+	if authInfo == nil {
+		return fmt.Errorf("not auth info returned for kubernetes auth with role %s and JWT %s: %s", role, jwt, err)
+	}
+
+	return nil
 }

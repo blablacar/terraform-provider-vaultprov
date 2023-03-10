@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	_ "github.com/hashicorp/terraform-plugin-go/tftypes"
+	"strconv"
 )
 
 const (
@@ -137,7 +138,7 @@ func (s *RandomSecret) Create(ctx context.Context, request resource.CreateReques
 	customMetadata[SecretTypeMetadata] = secretType
 	customMetadata[SecretLengthMetadata] = fmt.Sprintf("%d", secretLength)
 
-	data := map[string]string{
+	data := map[string]interface{}{
 		SecretDataKey: base64.StdEncoding.EncodeToString(key),
 	}
 
@@ -184,6 +185,18 @@ func (s *RandomSecret) Read(ctx context.Context, req resource.ReadRequest, resp 
 	if len(customMetadata) > 0 {
 		additionalMetadata := make(map[string]attr.Value)
 		for k, v := range customMetadata {
+			if k == SecretTypeMetadata {
+				continue
+			}
+			if k == SecretLengthMetadata {
+				len, err := strconv.Atoi(v)
+				if err != nil {
+					resp.Diagnostics.AddError("Error reading secret length: "+v, fmt.Sprintf("Error while reading secret %s: %s", secretPath, err.Error()))
+					return
+				}
+				data.Length = types.Int64Value(int64(len))
+				continue
+			}
 			additionalMetadata[k] = types.StringValue(v)
 		}
 		data.Metadata, _ = types.MapValue(types.StringType, additionalMetadata)
@@ -211,7 +224,7 @@ func (s *RandomSecret) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	// Check that path, length and type haven't changed
+	// Check that path, hasn't changed
 	if state.Path.ValueString() != plan.Path.ValueString() {
 		resp.Diagnostics.AddError("Error updating random key", fmt.Sprintf("Invalid path change. Random key can't have their path changed (old: %s, new: %s). Only metadata changes are authorized. Delete and recreate the key instead.", state.Path.ValueString(), plan.Path.ValueString()))
 		return
@@ -223,6 +236,9 @@ func (s *RandomSecret) Update(ctx context.Context, req resource.UpdateRequest, r
 	for k, v := range plan.Metadata.Elements() {
 		metadata[k] = v.(types.String).ValueString()
 	}
+
+	metadata[SecretTypeMetadata] = RandomSecretType
+	metadata[SecretLengthMetadata] = plan.Length.String()
 
 	err := s.vaultApi.UpdateSecretMetadata(secretPath, metadata)
 	if err != nil {
