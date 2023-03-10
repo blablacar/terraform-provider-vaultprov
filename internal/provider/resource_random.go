@@ -224,7 +224,7 @@ func (s *RandomSecret) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	// Check that path, length and type haven't changed
+	// Check that path, hasn't changed
 	if state.Path.ValueString() != plan.Path.ValueString() {
 		resp.Diagnostics.AddError("Error updating random key", fmt.Sprintf("Invalid path change. Random key can't have their path changed (old: %s, new: %s). Only metadata changes are authorized. Delete and recreate the key instead.", state.Path.ValueString(), plan.Path.ValueString()))
 		return
