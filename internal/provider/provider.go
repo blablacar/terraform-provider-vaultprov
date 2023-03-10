@@ -148,5 +148,11 @@ func setupVaultClientAuth(client *vault.Client, authConf *providerAuthModel) err
 		return fmt.Errorf("not auth info returned for kubernetes auth with role %s and JWT %s: %s", role, jwt, err)
 	}
 
+	if authInfo.Auth == nil || authInfo.Auth.ClientToken == "" {
+		return fmt.Errorf("response did not return ClientToken, client token not set")
+	}
+
+	client.SetToken(authInfo.Auth.ClientToken)
+
 	return nil
 }
