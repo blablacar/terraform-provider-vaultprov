@@ -147,13 +147,8 @@ func (c *VaultApi) UpdateSecretMetadata(secretPath string, metadata map[string]s
 		return fmt.Errorf("missing custom metadata")
 	}
 
-	//currentMetadata := secretMetadata.Data[SecretCustomDataField].(map[string]interface{})
-
 	// Update secret's metadata from plan (only metadata can be changed)
 	updatedMetadata := make(map[string]string)
-	//for k, v := range currentMetadata {
-	//	updatedMetadata[k] = v.(string)
-	//}
 
 	for k, v := range metadata {
 		updatedMetadata[k] = v
