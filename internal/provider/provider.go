@@ -123,6 +123,13 @@ func (p *vaultSecretProvider) Configure(ctx context.Context, req provider.Config
 		}
 	}
 
+	// Still no token, let's try from the token helper
+	if client.Token() == "" {
+		if token, _ := vaultapi.TokenFromHelper(); token != "" { //Ignore error, it's best effort only
+			client.SetToken(token)
+		}
+	}
+
 	p.vaultApi = vaultapi.NewVaultApi(client)
 	resp.ResourceData = p.vaultApi
 }
