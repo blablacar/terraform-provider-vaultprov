@@ -1,15 +1,14 @@
 name: Go build
 
-on: [push]
+on: [ push ]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -20,4 +19,44 @@ jobs:
           go mod download
       - name: Build
         run: |
-          go build -v .
+          make build
+      - name: Run unit tests
+        run: |
+          make test
+
+  acceptance:
+    needs: [ build ]
+    runs-on: ubuntu-latest
+    services:
+      vault:
+        image: hashicorp/vault
+        env:
+          VAULT_DEV_ROOT_TOKEN_ID: ROOT_TOKEN
+        options: >-
+          --health-cmd "VAULT_ADDR=http://127.0.0.1:8200 vault status"
+          --health-interval 1s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 8200:8200
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      # setup-terraform is used to install the Terraform CLI. If we don't do
+      # this then the terraform-plugin-sdk will attempt to download it for each test!
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: '1.5.*'
+          terraform_wrapper: false
+      - name: Check Terraform CLI version
+        run: terraform --version
+      - name: Acceptance Tests
+        env:
+          VAULT_TOKEN: "ROOT_TOKEN"
+          VAULT_ADDR: "http://localhost:8200"
+          # RUNS_IN_CONTAINER is false if not using jobs.<job_id>.container
+          RUNS_IN_CONTAINER: "false"
+        run: make testacc

@@ -38,9 +38,10 @@ type RandomSecret struct {
 }
 
 type randomSecretModel struct {
-	Path     types.String `tfsdk:"path"`
-	Length   types.Int64  `tfsdk:"length"`
-	Metadata types.Map    `tfsdk:"metadata"`
+	Path         types.String `tfsdk:"path"`
+	Length       types.Int64  `tfsdk:"length"`
+	Metadata     types.Map    `tfsdk:"metadata"`
+	ForceDestroy types.Bool   `tfsdk:"force_destroy"`
 }
 
 func NewRandomSecret() resource.Resource {
@@ -96,6 +97,14 @@ func (s *RandomSecret) Schema(ctx context.Context, request resource.SchemaReques
 					int64validator.AtLeast(1),
 				},
 				MarkdownDescription: "The length (in bytes) of the secret. Default is 32. This information will be stored as a custom metadata under the key `secret_length` ",
+			},
+			"force_destroy": schema.BoolAttribute{
+				Optional:            true,
+				Required:            false,
+				MarkdownDescription: "If set to 'true', removing the resource will delete the secret and all versions in Vault. If set to 'false' or not defined, removing the resource will fail.",
+				PlanModifiers: []planmodifier.Bool{
+					planmodifiers.BoolDefaultValue(types.BoolValue(false)),
+				},
 			},
 			"metadata": schema.MapAttribute{
 				ElementType:         types.StringType,
@@ -202,6 +211,11 @@ func (s *RandomSecret) Read(ctx context.Context, req resource.ReadRequest, resp 
 		data.Metadata, _ = types.MapValue(types.StringType, additionalMetadata)
 	}
 
+	// ForceDestroy may be null in state when importing an existing resource
+	if data.ForceDestroy.IsNull() {
+		data.ForceDestroy = types.BoolValue(false)
+	}
+
 	// Set state
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -247,6 +261,7 @@ func (s *RandomSecret) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	state.Metadata = plan.Metadata
+	state.ForceDestroy = plan.ForceDestroy
 
 	// Set state
 	diags = resp.State.Set(ctx, &state)
@@ -259,6 +274,11 @@ func (s *RandomSecret) Delete(ctx context.Context, req resource.DeleteRequest, r
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !state.ForceDestroy.ValueBool() {
+		resp.Diagnostics.AddError("Error deleting secret", "Can't delete resource for Vault secret '"+state.Path.ValueString()+"': 'force_destroy' must be set to 'true'")
 		return
 	}
 

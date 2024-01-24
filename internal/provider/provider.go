@@ -58,7 +58,7 @@ func (p *vaultSecretProvider) Schema(ctx context.Context, req provider.SchemaReq
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"address": schema.StringAttribute{
-				Required:            true,
+				Optional:            true,
 				MarkdownDescription: "Origin URL of the Vault server. This is a URL with a scheme, a hostname and a port but with no path.",
 			},
 			"token": schema.StringAttribute{
@@ -96,7 +96,10 @@ func (p *vaultSecretProvider) Configure(ctx context.Context, req provider.Config
 	}
 
 	vaultConf := vault.DefaultConfig()
-	vaultConf.Address = config.Address.ValueString()
+
+	if !config.Address.IsNull() {
+		vaultConf.Address = config.Address.ValueString()
+	}
 
 	client, err := vault.NewClient(vaultConf)
 	if err != nil {

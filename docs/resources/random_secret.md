@@ -32,7 +32,6 @@ resource "vaultprov_random_secret" "example" {
 
 ### Optional
 
+- `force_destroy` (Boolean) If set to 'true', removing the resource will delete the secret and all versions in Vault. If set to 'false' or not defined, removing the resource will fail.
 - `length` (Number) The length (in bytes) of the secret. Default is 32. This information will be stored as a custom metadata under the key `secret_length`
 - `metadata` (Map of String) A map of key/value strings that will be stored along the secret as custom metadata
-
-
