@@ -58,7 +58,7 @@ func (p *vaultSecretProvider) Schema(ctx context.Context, req provider.SchemaReq
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"address": schema.StringAttribute{
-				Required:            true,
+				Optional:            true,
 				MarkdownDescription: "Origin URL of the Vault server. This is a URL with a scheme, a hostname and a port but with no path.",
 			},
 			"token": schema.StringAttribute{
@@ -96,7 +96,10 @@ func (p *vaultSecretProvider) Configure(ctx context.Context, req provider.Config
 	}
 
 	vaultConf := vault.DefaultConfig()
-	vaultConf.Address = config.Address.ValueString()
+
+	if !config.Address.IsNull() {
+		vaultConf.Address = config.Address.ValueString()
+	}
 
 	client, err := vault.NewClient(vaultConf)
 	if err != nil {
@@ -120,6 +123,13 @@ func (p *vaultSecretProvider) Configure(ctx context.Context, req provider.Config
 				"Error configuring provider",
 				fmt.Sprintf("Can't create vault client for %s: %s", vaultConf.Address, err.Error()),
 			)
+		}
+	}
+
+	// Still no token, let's try from the token helper
+	if client.Token() == "" {
+		if token, _ := vaultapi.TokenFromHelper(); token != "" { //Ignore error, it's best effort only
+			client.SetToken(token)
 		}
 	}
 

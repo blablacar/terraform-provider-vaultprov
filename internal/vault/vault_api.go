@@ -3,6 +3,7 @@ package vault
 import (
 	"fmt"
 	vaultinternals "github.com/hashicorp/vault/api"
+	"github.com/hashicorp/vault/command/config"
 	"github.com/mitchellh/mapstructure"
 	"strconv"
 )
@@ -214,4 +215,12 @@ func (c *VaultApi) DeleteSecret(secretPath string) error {
 	}
 
 	return nil
+}
+
+func TokenFromHelper() (string, error) {
+	helper, err := config.DefaultTokenHelper()
+	if err != nil {
+		return "", nil
+	}
+	return helper.Get()
 }
