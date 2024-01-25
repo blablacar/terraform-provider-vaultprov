@@ -26,6 +26,8 @@ resource "vaultprov_random_secret" "my_key" {
   a [KV v2 mount](https://www.vaultproject.io/docs/secrets/kv/kv-v2). Used as ID for the resource
 - `length`: length of the secret (default: `32`)
 - `metadata`: Key/value (`string` only) custom metadata that will be added to the Vault Secret
+- `force_destroy`: If set to `true`, removing the resource will delete the secret and all versions in Vault. If set
+  to `false` or not defined, removing the resource will fail.
 
 The resulting Vault secret will have 2 additional metadata:
 
@@ -125,4 +127,11 @@ Then you can launch tests: `make testacc`
 
 In order to use the provider locally (without publishing it on Terraform Registry), use the `make install` command in
 order to copy the provider binary in the local provider registry.
+
+## Publish
+
+GitHub action is used to released new versions of the provider in Terraform Registry.
+
+Follow the [official Terraform documentation](https://developer.hashicorp.com/terraform/registry/providers/publishing)
+for the publishing procedure.
 

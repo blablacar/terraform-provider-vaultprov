@@ -98,18 +98,18 @@ func (s *RandomSecret) Schema(ctx context.Context, request resource.SchemaReques
 				},
 				MarkdownDescription: "The length (in bytes) of the secret. Default is 32. This information will be stored as a custom metadata under the key `secret_length` ",
 			},
-			"force_destroy": schema.BoolAttribute{
-				Optional:            true,
-				Required:            false,
-				MarkdownDescription: "If set to 'true', removing the resource will delete the secret and all versions in Vault. If set to 'false' or not defined, removing the resource will fail.",
-				PlanModifiers: []planmodifier.Bool{
-					planmodifiers.BoolDefaultValue(types.BoolValue(false)),
-				},
-			},
 			"metadata": schema.MapAttribute{
 				ElementType:         types.StringType,
 				Optional:            true,
 				MarkdownDescription: "A map of key/value strings that will be stored along the secret as custom metadata",
+			},
+			"force_destroy": schema.BoolAttribute{
+				Optional:            true,
+				Required:            false,
+				MarkdownDescription: "If set to `true`, removing the resource will delete the secret and all versions in Vault. If set to `false` or not defined, removing the resource will fail.",
+				PlanModifiers: []planmodifier.Bool{
+					planmodifiers.BoolDefaultValue(types.BoolValue(false)),
+				},
 			},
 		},
 		MarkdownDescription: "A cryptographic randomly generated secret stored as bytes in a Vault secret. The resulting Vault secret will have a custom metadata `secret_type` with the value `random_secret` and a custom metadata `secret_length` with the same value as the `length` attribute.",
