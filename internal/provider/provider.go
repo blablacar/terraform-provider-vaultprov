@@ -151,11 +151,11 @@ func setupVaultClientAuth(client *vault.Client, authConf *providerAuthModel) err
 	path := authConf.Path.ValueString()
 	authInfo, err := client.Logical().Write(path, loginData)
 	if err != nil {
-		return fmt.Errorf("unable to log in with Vault Kubernetes authentication with role %s and JWT %s: %w", role, jwt, err)
+		return fmt.Errorf("unable to log in with Vault Kubernetes authentication with role %s and err : %w", role, err)
 	}
 
 	if authInfo == nil {
-		return fmt.Errorf("not auth info returned for kubernetes auth with role %s and JWT %s: %s", role, jwt, err)
+		return fmt.Errorf("not auth info returned for kubernetes auth with role %s and err : %s", role, err)
 	}
 
 	if authInfo.Auth == nil || authInfo.Auth.ClientToken == "" {
