@@ -140,7 +140,6 @@ func (p *vaultSecretProvider) Configure(ctx context.Context, req provider.Config
 func setupVaultClientAuth(client *vault.Client, authConf *providerAuthModel) error {
 	role := authConf.Role.ValueString()
 	jwt := authConf.Jwt.ValueString()
-	jwtTrimmed := jwt[0:5]
 
 	//We don't use auth.NewKubernetesAuth in order to have the same input parameters as the official Vault provider
 	// (otherwise 'path' would have to be replaced by 'mount')
@@ -152,11 +151,11 @@ func setupVaultClientAuth(client *vault.Client, authConf *providerAuthModel) err
 	path := authConf.Path.ValueString()
 	authInfo, err := client.Logical().Write(path, loginData)
 	if err != nil {
-		return fmt.Errorf("unable to log in with Vault Kubernetes authentication with role %s and JWT starts with %s: %w", role, jwtTrimmed, err)
+		return fmt.Errorf("unable to log in with Vault Kubernetes authentication with role %s and err : %w", role, err)
 	}
 
 	if authInfo == nil {
-		return fmt.Errorf("not auth info returned for kubernetes auth with role %s and JWT starts with %s: %s", role, jwtTrimmed, err)
+		return fmt.Errorf("not auth info returned for kubernetes auth with role %s and err : %s", role, err)
 	}
 
 	if authInfo.Auth == nil || authInfo.Auth.ClientToken == "" {
