@@ -6,13 +6,34 @@ only the secret itself isn't.
 
 ## Resources
 
-There's only one resource: `vaultprov_random_secret`. It will generate a fully random bytes array that can be used for
-symmetric cryptography operation (encryption, MAC).
+There's only one resource: `vaultprov_random_secret` that support two types of secret: `random_secret` (default) and
+`curve25519_keypair`.
+
+### `random_secret`
+
+Generate fully random bytes that can be used as secret keys for symmetric cryptography operation (encryption, MAC).
 
 ```hcl
 resource "vaultprov_random_secret" "my_key" {
-  path     = "/secrets/foo/bar"
-  length   = 32
+  path   = "/secrets/foo/bar"
+  type   = "random_secret"
+  length = 32
+  metadata = {
+    owner    = "my_team"
+    some-key = "some-value"
+  }
+}
+```
+
+### `curve25519_keypair`
+
+Generate a Curve25519 keypair that can be used for asymmetric cryptography operation (key exchange, signatures). The
+public and private keys are concatenated (in this order) and stored as one byte array in Vault.
+
+```hcl
+resource "vaultprov_random_secret" "my_keypair" {
+  path = "/secrets/bar/foo"
+  type = "curve25519_keypair"
   metadata = {
     owner    = "my_team"
     some-key = "some-value"
@@ -24,15 +45,18 @@ resource "vaultprov_random_secret" "my_key" {
 
 - `path`: path of the generated Secret into Vault. Must be a path to
   a [KV v2 mount](https://www.vaultproject.io/docs/secrets/kv/kv-v2). Used as ID for the resource
-- `length`: length of the secret (default: `32`)
+- `type`: secret to generate. Either `random_secret` (default) or `curve25519_keypair`
+- `length`: length of the secret
+    - `random_secret`: default is `32`
+    - `curve25519_keypair`: not supported (always 64: 32 bytes for the public key + 32 bytes for the private key)
 - `metadata`: Key/value (`string` only) custom metadata that will be added to the Vault Secret
 - `force_destroy`: If set to `true`, removing the resource will delete the secret and all versions in Vault. If set
   to `false` or not defined, removing the resource will fail.
 
 The resulting Vault secret will have 2 additional metadata:
 
-- `secret_type`:`random_secret` value
-- `secret_length`: secret length as defined in Terraform
+- `secret_type`: on of the supported types (`random_secret` or `curve25519_keypair`)
+- `secret_length`: secret length in bytes
 
 Once created, only metadata can be updated without deleting the secret. `path` can't be changed afterward.
 Changing `length` will cause the secret to be deleted and re-created.
@@ -50,7 +74,7 @@ terraform {
   required_providers {
     vaultprov = {
       source  = "blablacar/vaultprov"
-      version = "0.2.0"
+      version = "0.4.0"
     }
   }
 }
@@ -61,7 +85,7 @@ provider "vaultprov" {
   auth = {
     path = "auth/kubernetes/login"
     role = "some-role"
-    jwt  = file("/var/run/secrets/kubernetes.io/serviceaccount/token")
+    jwt = file("/var/run/secrets/kubernetes.io/serviceaccount/token")
   }
 }
 ```

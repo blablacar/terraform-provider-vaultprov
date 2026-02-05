@@ -3,19 +3,29 @@
 page_title: "vaultprov_random_secret Resource - vaultprov"
 subcategory: ""
 description: |-
-  A cryptographic randomly generated secret stored as bytes in a Vault secret. The resulting Vault secret will have a custom metadata secret_type with the value random_secret and a custom metadata secret_length with the same value as the length attribute.
+  A cryptographic randomly generated secret stored as bytes in a Vault secret. Secret can be either a random bytes (random_secret) array or a Curve25519 keypair (curve25519_keypair). The resulting Vault secret will have a custom metadata secret_type with the type of the secret and a custom metadata secret_length with the same value as the length attribute.
 ---
 
 # vaultprov_random_secret (Resource)
 
-A cryptographic randomly generated secret stored as bytes in a Vault secret. The resulting Vault secret will have a custom metadata `secret_type` with the value `random_secret` and a custom metadata `secret_length` with the same value as the `length` attribute.
+A cryptographic randomly generated secret stored as bytes in a Vault secret. Secret can be either a random bytes (`random_secret`) array or a Curve25519 keypair (`curve25519_keypair`). The resulting Vault secret will have a custom metadata `secret_type` with the type of the secret and a custom metadata `secret_length` with the same value as the `length` attribute.
 
 ## Example Usage
 
 ```terraform
-resource "vaultprov_random_secret" "example" {
-  path     = "/secret/foo/bar"
-  length   = 32
+resource "vaultprov_random_secret" "example_bytes" {
+  path   = "/secret/foo/bar"
+  type   = "random_secret"
+  length = 32
+  metadata = {
+    owner    = "my_team"
+    some-key = "some-value"
+  }
+}
+
+resource "vaultprov_random_secret" "example_keypair" {
+  path = "/secret/bar/foo"
+  type = "curve25519_keypair"
   metadata = {
     owner    = "my_team"
     some-key = "some-value"
@@ -33,5 +43,6 @@ resource "vaultprov_random_secret" "example" {
 ### Optional
 
 - `force_destroy` (Boolean) If set to `true`, removing the resource will delete the secret and all versions in Vault. If set to `false` or not defined, removing the resource will fail.
-- `length` (Number) The length (in bytes) of the secret. Default is 32. This information will be stored as a custom metadata under the key `secret_length`
+- `length` (Number) The length (in bytes) of the secret. Default is 32 for `random_secret`. For `curve25519_keypair`, this attribute not supported (keypair are always 64 bytes long). This information will be stored as a custom metadata under the key `secret_length`.
 - `metadata` (Map of String) A map of key/value strings that will be stored along the secret as custom metadata
+- `type` (String) Type of secret to create. Possible values are `random_secret`, `curve25519_keypair`.
