@@ -16,6 +16,5 @@ func GenerateCurve25519Keypair() ([]byte, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return privateKey.Bytes(), privateKey.Public().(*ecdh.PublicKey).Bytes(), nil
-
+	return privateKey.Bytes(), privateKey.PublicKey().Bytes(), nil
 }

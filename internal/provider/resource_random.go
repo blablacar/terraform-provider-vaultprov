@@ -14,9 +14,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -24,13 +24,8 @@ import (
 )
 
 const (
-	SecretTypeMetadata             = "secret_type"
-	SecretLengthMetadata           = "secret_length"
-	RandomBytesType                = "random_secret"
-	Curse25519KeypairType          = "curve25519_keypair"
-	SecretDataKey                  = "secret"
-	DefaultRandomBytesLength       = 32
-	DefaultCurve25519KeypairLength = 64
+	RandomSecretType          = "random_secret"
+	DefaultRandomSecretLength = 32
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
@@ -43,7 +38,6 @@ type RandomSecret struct {
 
 type randomSecretModel struct {
 	Path         types.String `tfsdk:"path"`
-	Type         types.String `tfsdk:"type"`
 	Length       types.Int64  `tfsdk:"length"`
 	Metadata     types.Map    `tfsdk:"metadata"`
 	ForceDestroy types.Bool   `tfsdk:"force_destroy"`
@@ -91,26 +85,17 @@ func (s *RandomSecret) Schema(ctx context.Context, request resource.SchemaReques
 				},
 				MarkdownDescription: "Full name of the Vault secret. For a nested secret the name is the nested path excluding the mount and data prefix. For example, for a secret at `keys/data/foo/bar/baz` the name is `foo/bar/baz`. Serves as the secret id.",
 			},
-			"type": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString(RandomBytesType),
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
-				MarkdownDescription: "Type of secret to create. Possible values are `random_secret`, `curve25519_keypair`.",
-			},
 			"length": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				//Default:  int64default.StaticInt64(DefaultRandomBytesLength),
+				Default:  int64default.StaticInt64(DefaultRandomSecretLength),
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.RequiresReplace(),
 				},
 				Validators: []validator.Int64{
 					int64validator.AtLeast(1),
 				},
-				MarkdownDescription: "The length (in bytes) of the secret. Default is 32 for `random_secret`. For `curve25519_keypair`, this attribute not supported (keypair are always 64 bytes long). This information will be stored as a custom metadata under the key `secret_length`.",
+				MarkdownDescription: "The length (in bytes) of the secret. Default is 32. This information will be stored as a custom metadata under the key `secret_length` ",
 			},
 			"metadata": schema.MapAttribute{
 				ElementType:         types.StringType,
@@ -125,43 +110,8 @@ func (s *RandomSecret) Schema(ctx context.Context, request resource.SchemaReques
 				MarkdownDescription: "If set to `true`, removing the resource will delete the secret and all versions in Vault. If set to `false` or not defined, removing the resource will fail.",
 			},
 		},
-		MarkdownDescription: "A cryptographic randomly generated secret stored as bytes in a Vault secret. Secret can be either a random bytes (`random_secret`) array or a Curve25519 keypair (`curve25519_keypair`). The resulting Vault secret will have a custom metadata `secret_type` with the type of the secret and a custom metadata `secret_length` with the same value as the `length` attribute.",
+		MarkdownDescription: "A cryptographic randomly generated secret stored as bytes in a Vault secret. The resulting Vault secret will have a custom metadata `secret_type` with the value `random_secret` and a custom metadata `secret_length` with the same value as the `length` attribute.",
 	}
-}
-
-func (s *RandomSecret) ModifyPlan(ctx context.Context, request resource.ModifyPlanRequest, response *resource.ModifyPlanResponse) {
-	// If the entire plan is null, the resource is planned for destruction.
-	if request.Plan.Raw.IsNull() {
-		return
-	}
-
-	var plan *randomSecretModel
-	diags := request.Plan.Get(ctx, &plan)
-	response.Diagnostics.Append(diags...)
-	if response.Diagnostics.HasError() {
-		return
-	}
-
-	if plan.Type.ValueString() == RandomBytesType {
-		if plan.Length.IsUnknown() {
-			response.Plan.SetAttribute(
-				ctx,
-				path.Root("length"),
-				types.Int64Value(DefaultRandomBytesLength),
-			)
-		}
-	} else if plan.Type.ValueString() == Curse25519KeypairType {
-		if !plan.Length.IsUnknown() && plan.Length.ValueInt64() != DefaultCurve25519KeypairLength {
-			response.Diagnostics.AddError("Error creating Curve25519 keypair", fmt.Sprintf("Length attribute is not supported for Curve25519 keypair type (value: %d)", plan.Length.ValueInt64()))
-			return
-		}
-		response.Plan.SetAttribute(
-			ctx,
-			path.Root("length"),
-			types.Int64Value(DefaultCurve25519KeypairLength),
-		)
-	}
-
 }
 
 func (s *RandomSecret) Create(ctx context.Context, request resource.CreateRequest, response *resource.CreateResponse) {
@@ -174,30 +124,14 @@ func (s *RandomSecret) Create(ctx context.Context, request resource.CreateReques
 		return
 	}
 
-	var err error
 	var key []byte
-	var secretLength int
 
-	secretType := plan.Type.ValueString()
+	secretType := RandomSecretType
+	secretLength := int(plan.Length.ValueInt64())
 
-	if secretType == RandomBytesType {
-		secretLength = int(plan.Length.ValueInt64())
-		key, err = secrets.GenerateRandomSecret(secretLength)
-		if err != nil {
-			response.Diagnostics.AddError("Error creating random key", fmt.Sprintf("Could generate random bytes, unexpected error: %s", err.Error()))
-			return
-		}
-	} else if secretType == Curse25519KeypairType {
-		privateKey, publicKey, err := secrets.GenerateCurve25519Keypair()
-		if err != nil {
-			response.Diagnostics.AddError("Error creating Curve25519 keypair", fmt.Sprintf("Could not generate Curve25519 keypair, unexpected error: %s", err.Error()))
-			return
-		}
-		key = append(publicKey, privateKey...) // Concat public and private keys
-		secretLength = len(key)
-		plan.Length = types.Int64Value(int64(secretLength))
-	} else {
-		response.Diagnostics.AddError("Error creating secret", fmt.Sprintf("Unsupported secret type: %s. Supported types are: %s, %s", secretType, RandomBytesType, Curse25519KeypairType))
+	key, err := secrets.GenerateRandomSecret(secretLength)
+	if err != nil {
+		response.Diagnostics.AddError("Error creating random key", fmt.Sprintf("Could generate random bytes, unexpected error: %s", err.Error()))
 		return
 	}
 
@@ -259,7 +193,6 @@ func (s *RandomSecret) Read(ctx context.Context, req resource.ReadRequest, resp 
 		additionalMetadata := make(map[string]attr.Value)
 		for k, v := range customMetadata {
 			if k == SecretTypeMetadata {
-				data.Type = types.StringValue(v)
 				continue
 			}
 			if k == SecretLengthMetadata {
@@ -316,7 +249,7 @@ func (s *RandomSecret) Update(ctx context.Context, req resource.UpdateRequest, r
 		metadata[k] = v.(types.String).ValueString()
 	}
 
-	metadata[SecretTypeMetadata] = plan.Type.ValueString()
+	metadata[SecretTypeMetadata] = RandomSecretType
 	metadata[SecretLengthMetadata] = plan.Length.String()
 
 	err := s.vaultApi.UpdateSecretMetadata(secretPath, metadata)
