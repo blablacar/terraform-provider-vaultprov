@@ -14,7 +14,7 @@ A cryptographic keypair stored as two Vault secrets (one for the private key and
 
 ```terraform
 resource "vaultprov_keypair_secret" "example_keypair" {
-  path = "/secret/bar/foo"
+  base_path = "/secret/bar/foo"
   type = "curve25519"
   metadata = {
     owner    = "my_team"

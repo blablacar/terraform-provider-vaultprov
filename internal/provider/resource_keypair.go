@@ -134,7 +134,7 @@ func (s *KeyPairSecret) Create(ctx context.Context, request resource.CreateReque
 			return
 		}
 	} else {
-		response.Diagnostics.AddError("Error creating secret", fmt.Sprintf("Unsupported secret type: %s. Supported types are: %s, %s", secretType, RandomBytesType, Curve25519KeyPairType))
+		response.Diagnostics.AddError("Error creating secret", fmt.Sprintf("Unsupported secret type: %s. Supported types are: %s", secretType, Curve25519KeyPairType))
 		return
 	}
 
@@ -167,7 +167,7 @@ func (s *KeyPairSecret) Create(ctx context.Context, request resource.CreateReque
 
 	err = s.vaultApi.CreateSecret(secret)
 	if err != nil {
-		response.Diagnostics.AddError("Error creating private key key", fmt.Sprintf("Couldn't create Vault secret for private key: %s", err.Error()))
+		response.Diagnostics.AddError("Error creating private key", fmt.Sprintf("Couldn't create Vault secret for private key: %s", err.Error()))
 		return
 	}
 
@@ -188,6 +188,14 @@ func (s *KeyPairSecret) Create(ctx context.Context, request resource.CreateReque
 	err = s.vaultApi.CreateSecret(secret)
 	if err != nil {
 		response.Diagnostics.AddError("Error creating public key", fmt.Sprintf("Couldn't create Vault secret for public key: %s", err.Error()))
+
+		// Roll back previously created private key to avoid leaving an orphaned secret
+		if rollbackErr := s.vaultApi.DeleteSecret(privateKeyPath); rollbackErr != nil {
+			response.Diagnostics.AddWarning(
+				"Rollback failed after public key creation error",
+				fmt.Sprintf("Failed to delete previously created private key at %s: %s", privateKeyPath, rollbackErr.Error()),
+			)
+		}
 		return
 	}
 
