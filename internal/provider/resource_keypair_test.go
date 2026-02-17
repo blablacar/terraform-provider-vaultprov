@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -16,7 +17,7 @@ func TestAccCurve25519Secret(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read testing
 			{
-				Config: testAccExampleCurve25519ResourceConfig("my_team", false),
+				Config: testAccExampleCurve25519ResourceConfig("/secret/curve", Curve25519KeyPairType, "my_team", false),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(keypairResourceName, "base_path", "/secret/curve"),
 					resource.TestCheckResourceAttr(keypairResourceName, "type", Curve25519KeyPairType),
@@ -27,7 +28,7 @@ func TestAccCurve25519Secret(t *testing.T) {
 			},
 			// Metadata update testing
 			{
-				Config: testAccExampleCurve25519ResourceConfig("some_other_team", false),
+				Config: testAccExampleCurve25519ResourceConfig("/secret/curve", Curve25519KeyPairType, "some_other_team", false),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(keypairResourceName, "base_path", "/secret/curve"),
 					resource.TestCheckResourceAttr(keypairResourceName, "type", Curve25519KeyPairType),
@@ -48,7 +49,7 @@ func TestAccCurve25519Secret(t *testing.T) {
 			},
 			// ForceDestroy testing (also needed at the end so the resource can be automatically deleted)
 			{
-				Config: testAccExampleCurve25519ResourceConfig("some_other_team", true),
+				Config: testAccExampleCurve25519ResourceConfig("/secret/curve", Curve25519KeyPairType, "some_other_team", true),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(keypairResourceName, "base_path", "/secret/curve"),
 					resource.TestCheckResourceAttr(keypairResourceName, "type", Curve25519KeyPairType),
@@ -61,16 +62,72 @@ func TestAccCurve25519Secret(t *testing.T) {
 	})
 }
 
-func testAccExampleCurve25519ResourceConfig(team string, forceDestroy bool) string {
+func TestAccCurve25519Secret_ErrorCases(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create initial resource
+			{
+				Config: testAccExampleCurve25519ResourceConfig("/secret/curve-errtest", Curve25519KeyPairType, "my_team", true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(keypairResourceName, "base_path", "/secret/curve-errtest"),
+					resource.TestCheckResourceAttr(keypairResourceName, "type", Curve25519KeyPairType),
+				),
+			},
+			// Test: attempting to change base_path (should trigger replacement)
+			// The RequiresReplace plan modifier will force a destroy-then-create operation
+			{
+				Config: testAccExampleCurve25519ResourceConfig("/secret/curve-errtest2", Curve25519KeyPairType, "my_team", true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(keypairResourceName, "base_path", "/secret/curve-errtest2"),
+				),
+			},
+			// Test: attempting to change type (should trigger replacement)
+			// Note: This will fail because ed25519 is not a supported type, but it tests the behavior
+			{
+				Config:      testAccExampleCurve25519ResourceConfig("/secret/curve-errtest", "ed25519", "my_team", true),
+				ExpectError: regexp.MustCompile(`.*Unsupported secret type.*ed25519.*`),
+			},
+		},
+	})
+}
+
+func TestAccCurve25519Secret_DeleteWithoutForceDestroy(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create resource without force_destroy
+			{
+				Config: testAccExampleCurve25519ResourceConfig("/secret/curve-nodelete", Curve25519KeyPairType, "my_team", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(keypairResourceName, "base_path", "/secret/curve-nodelete"),
+					resource.TestCheckResourceAttr(keypairResourceName, "force_destroy", "false"),
+				),
+			},
+			// Update to enable force_destroy so we can properly clean up
+			{
+				Config: testAccExampleCurve25519ResourceConfig("/secret/curve-nodelete", Curve25519KeyPairType, "my_team", true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(keypairResourceName, "base_path", "/secret/curve-nodelete"),
+					resource.TestCheckResourceAttr(keypairResourceName, "force_destroy", "true"),
+				),
+			},
+		},
+	})
+}
+
+func testAccExampleCurve25519ResourceConfig(basepath, keyType, team string, forceDestroy bool) string {
 	return fmt.Sprintf(`
 resource "vaultprov_keypair_secret" "test" {
-  base_path     = "/secret/curve"
-  type	        = "curve25519"
+  base_path     = "%s"
+  type	        = "%s"
   metadata      = {
     owner = "%s"
     foo   = "bar"
   }
   force_destroy = %t
 }
-`, team, forceDestroy)
+`, basepath, keyType, team, forceDestroy)
 }
