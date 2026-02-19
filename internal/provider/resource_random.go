@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/blablacar/terraform-provider-vaultprov/internal/planmodifiers"
+	"strconv"
+
 	"github.com/blablacar/terraform-provider-vaultprov/internal/secrets"
 	"github.com/blablacar/terraform-provider-vaultprov/internal/vault"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -12,20 +13,18 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	_ "github.com/hashicorp/terraform-plugin-go/tftypes"
-	"strconv"
 )
 
 const (
-	SecretTypeMetadata        = "secret_type"
-	SecretLengthMetadata      = "secret_length"
 	RandomSecretType          = "random_secret"
-	SecretDataKey             = "secret"
 	DefaultRandomSecretLength = 32
 )
 
@@ -89,8 +88,8 @@ func (s *RandomSecret) Schema(ctx context.Context, request resource.SchemaReques
 			"length": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Default:  int64default.StaticInt64(DefaultRandomSecretLength),
 				PlanModifiers: []planmodifier.Int64{
-					planmodifiers.Int64DefaultValue(types.Int64Value(DefaultRandomSecretLength)),
 					int64planmodifier.RequiresReplace(),
 				},
 				Validators: []validator.Int64{
@@ -106,10 +105,9 @@ func (s *RandomSecret) Schema(ctx context.Context, request resource.SchemaReques
 			"force_destroy": schema.BoolAttribute{
 				Optional:            true,
 				Required:            false,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
 				MarkdownDescription: "If set to `true`, removing the resource will delete the secret and all versions in Vault. If set to `false` or not defined, removing the resource will fail.",
-				PlanModifiers: []planmodifier.Bool{
-					planmodifiers.BoolDefaultValue(types.BoolValue(false)),
-				},
 			},
 		},
 		MarkdownDescription: "A cryptographic randomly generated secret stored as bytes in a Vault secret. The resulting Vault secret will have a custom metadata `secret_type` with the value `random_secret` and a custom metadata `secret_length` with the same value as the `length` attribute.",

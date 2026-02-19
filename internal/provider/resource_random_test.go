@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-const resourceName = "vaultprov_random_secret.test"
+const randomSecretResourceName = "vaultprov_random_secret.test"
 
 func TestAccRandomSecret(t *testing.T) {
 	resource.Test(t, resource.TestCase{
@@ -18,26 +18,26 @@ func TestAccRandomSecret(t *testing.T) {
 			{
 				Config: testAccExampleResourceConfig("my_team", false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "path", "/secret/foo/bar"),
-					resource.TestCheckResourceAttr(resourceName, "length", "32"),
-					resource.TestCheckResourceAttr(resourceName, "force_destroy", "false"),
-					resource.TestCheckResourceAttr(resourceName, "metadata.owner", "my_team"),
-					resource.TestCheckResourceAttr(resourceName, "metadata.foo", "bar"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "path", "/secret/foo/bar"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "length", "32"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "force_destroy", "false"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "metadata.owner", "my_team"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "metadata.foo", "bar"),
 				),
 			},
 			// Metadata update testing
 			{
 				Config: testAccExampleResourceConfig("some_other_team", false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "path", "/secret/foo/bar"),
-					resource.TestCheckResourceAttr(resourceName, "length", "32"),
-					resource.TestCheckResourceAttr(resourceName, "force_destroy", "false"),
-					resource.TestCheckResourceAttr(resourceName, "metadata.owner", "some_other_team"),
-					resource.TestCheckResourceAttr(resourceName, "metadata.foo", "bar")),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "path", "/secret/foo/bar"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "length", "32"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "force_destroy", "false"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "metadata.owner", "some_other_team"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "metadata.foo", "bar")),
 			},
 			// ImportState testing
 			{
-				ResourceName:      resourceName,
+				ResourceName:      randomSecretResourceName,
 				ImportState:       true,
 				ImportStateVerify: true,
 				ImportStateId:     "/secret/foo/bar",
@@ -50,11 +50,11 @@ func TestAccRandomSecret(t *testing.T) {
 			{
 				Config: testAccExampleResourceConfig("some_other_team", true),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "path", "/secret/foo/bar"),
-					resource.TestCheckResourceAttr(resourceName, "length", "32"),
-					resource.TestCheckResourceAttr(resourceName, "force_destroy", "true"),
-					resource.TestCheckResourceAttr(resourceName, "metadata.owner", "some_other_team"),
-					resource.TestCheckResourceAttr(resourceName, "metadata.foo", "bar")),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "path", "/secret/foo/bar"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "length", "32"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "force_destroy", "true"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "metadata.owner", "some_other_team"),
+					resource.TestCheckResourceAttr(randomSecretResourceName, "metadata.foo", "bar")),
 			},
 			//// Delete testing automatically occurs in TestCase
 		},

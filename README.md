@@ -6,13 +6,16 @@ only the secret itself isn't.
 
 ## Resources
 
-There's only one resource: `vaultprov_random_secret`. It will generate a fully random bytes array that can be used for
-symmetric cryptography operation (encryption, MAC).
+There are two resources: `vaultprov_random_secret` for generating random secrets and `vaultprov_keypair_secret` for generating cryptographic keypairs.
+
+### `vaultprov_random_secret`
+
+Generate fully random bytes that can be used as secret keys for symmetric cryptography operation (encryption, MAC).
 
 ```hcl
 resource "vaultprov_random_secret" "my_key" {
-  path     = "/secrets/foo/bar"
-  length   = 32
+  path   = "/secrets/foo/bar"
+  length = 32
   metadata = {
     owner    = "my_team"
     some-key = "some-value"
@@ -24,20 +27,56 @@ resource "vaultprov_random_secret" "my_key" {
 
 - `path`: path of the generated Secret into Vault. Must be a path to
   a [KV v2 mount](https://www.vaultproject.io/docs/secrets/kv/kv-v2). Used as ID for the resource
-- `length`: length of the secret (default: `32`)
+- `length`: length of the secret in bytes. Default is `32`
 - `metadata`: Key/value (`string` only) custom metadata that will be added to the Vault Secret
 - `force_destroy`: If set to `true`, removing the resource will delete the secret and all versions in Vault. If set
   to `false` or not defined, removing the resource will fail.
 
 The resulting Vault secret will have 2 additional metadata:
 
-- `secret_type`:`random_secret` value
-- `secret_length`: secret length as defined in Terraform
+- `secret_type`: will be set to `random_secret`
+- `secret_length`: secret length in bytes
 
 Once created, only metadata can be updated without deleting the secret. `path` can't be changed afterward.
 Changing `length` will cause the secret to be deleted and re-created.
 
 :warning: When deleting a `vaultprov_random_secret` resource, every secret's versions and metadata will be **permanently
+deleted**.
+
+### `vaultprov_keypair_secret`
+
+Generate a Curve25519 keypair that can be used for asymmetric cryptography operation (key exchange, signatures). The
+private and public keys are stored as two separate Vault secrets.
+
+```hcl
+resource "vaultprov_keypair_secret" "my_keypair" {
+  base_path = "/secrets/bar/foo"
+  type      = "curve25519"
+  metadata = {
+    owner    = "my_team"
+    some-key = "some-value"
+  }
+}
+```
+
+`vaultprov_keypair_secret` attributes:
+
+- `base_path`: base path of the keypair secrets in Vault. Two Vault secrets will be created at this path: one for the private key (`private`) and one for the public one (`public`). For example, for a `base_path` `/secrets/bar/foo`, the keypair secrets will be `/secrets/bar/foo/private` and `/secrets/bar/foo/public`. Serves as the resource id.
+- `type`: type of keypair to create. Only supported value for now is `curve25519` (default)
+- `metadata`: Key/value (`string` only) custom metadata that will be added to the Vault Secrets
+- `force_destroy`: If set to `true`, removing the resource will delete the secrets and all versions in Vault. If set
+  to `false` or not defined, removing the resource will fail.
+
+The resulting Vault secrets will have additional metadata:
+
+- `secret_type`: will be set to `curve25519`
+- `secret_length`: secret length in bytes (32 for Curve25519)
+- `keypair_linked_secret_path`: path to the other part of the keypair
+- `keypair_part`: either `private` or `public`
+
+Once created, only metadata can be updated without deleting the secrets. `base_path` and `type` can't be changed afterward.
+
+:warning: When deleting a `vaultprov_keypair_secret` resource, both secrets' versions and metadata will be **permanently
 deleted**.
 
 ## Provider configuration
@@ -50,7 +89,7 @@ terraform {
   required_providers {
     vaultprov = {
       source  = "blablacar/vaultprov"
-      version = "0.2.0"
+      version = "0.4.0"
     }
   }
 }
@@ -61,7 +100,7 @@ provider "vaultprov" {
   auth = {
     path = "auth/kubernetes/login"
     role = "some-role"
-    jwt  = file("/var/run/secrets/kubernetes.io/serviceaccount/token")
+    jwt = file("/var/run/secrets/kubernetes.io/serviceaccount/token")
   }
 }
 ```
