@@ -3,8 +3,6 @@ package secrets
 import (
 	"crypto/ecdh"
 	cryptorand "crypto/rand"
-	"encoding/base64"
-	"fmt"
 	mathrand "math/rand/v2"
 	"reflect"
 	"testing"
@@ -142,8 +140,6 @@ func TestGenerateCurve25519Keypair_EncryptDecrypt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateCurve25519Keypair() for receiver error = %v", err)
 	}
-	fmt.Println(base64.StdEncoding.EncodeToString(senderPriv))
-	fmt.Println(base64.StdEncoding.EncodeToString(senderPub))
 
 	// Sender computes shared secret
 	senderShared, err := curve25519.X25519(senderPriv, receiverPub)

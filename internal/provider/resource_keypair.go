@@ -5,9 +5,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/blablacar/terraform-provider-vaultprov/internal/secrets"
 	"github.com/blablacar/terraform-provider-vaultprov/internal/vault"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -16,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	_ "github.com/hashicorp/terraform-plugin-go/tftypes"
 )
@@ -59,7 +62,7 @@ func (s *KeyPairSecret) Configure(ctx context.Context, req resource.ConfigureReq
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *vault.VaultApi, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -92,6 +95,9 @@ func (s *KeyPairSecret) Schema(ctx context.Context, request resource.SchemaReque
 				Default:  stringdefault.StaticString(Curve25519KeyPairType),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+				},
+				Validators: []validator.String{
+					stringvalidator.OneOf(Curve25519KeyPairType),
 				},
 				MarkdownDescription: "Type of keypair to create. Only supported value for now is `curve25519`.",
 			},
@@ -212,11 +218,11 @@ func (s *KeyPairSecret) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	pkPath := data.BasePath.ValueString() + "/" + PrivateKeyPart
+	privateKeyPath, _ := s.keypairPaths(data.BasePath.ValueString())
 
-	secret, err := s.vaultApi.ReadSecret(pkPath)
+	secret, err := s.vaultApi.ReadSecret(privateKeyPath)
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading secret", fmt.Sprintf("Error while reading secret %s: %s", pkPath, err.Error()))
+		resp.Diagnostics.AddError("Error reading secret", fmt.Sprintf("Error while reading secret %s: %s", privateKeyPath, err.Error()))
 		return
 	}
 
@@ -227,20 +233,23 @@ func (s *KeyPairSecret) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	customMetadata := secret.Metadata
 
-	if len(customMetadata) > 0 {
-		additionalMetadata := make(map[string]attr.Value)
-		for k, v := range customMetadata {
-			if k == SecretTypeMetadata {
-				data.Type = types.StringValue(v)
-				continue
-			}
-			if k == SecretLengthMetadata || k == KeyPairLinkedSecretMetadata || k == KeyPairPartMetadata {
-				continue
-			}
-			additionalMetadata[k] = types.StringValue(v)
+	additionalMetadata := make(map[string]attr.Value)
+	for k, v := range customMetadata {
+		if k == SecretTypeMetadata {
+			data.Type = types.StringValue(v)
+			continue
 		}
-		data.Metadata, _ = types.MapValue(types.StringType, additionalMetadata)
+		if k == SecretLengthMetadata || k == KeyPairLinkedSecretMetadata || k == KeyPairPartMetadata {
+			continue
+		}
+		additionalMetadata[k] = types.StringValue(v)
 	}
+	mapVal, mapDiags := types.MapValue(types.StringType, additionalMetadata)
+	resp.Diagnostics.Append(mapDiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.Metadata = mapVal
 
 	// ForceDestroy may be null in state when importing an existing resource
 	if data.ForceDestroy.IsNull() {
@@ -269,42 +278,42 @@ func (s *KeyPairSecret) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
-	// Check that path, hasn't changed
-	if state.BasePath.ValueString() != plan.BasePath.ValueString() {
-		resp.Diagnostics.AddError("Error updating keypair", fmt.Sprintf("Invalid path change. Keypair can't have their path changed (old: %s, new: %s). Only metadata changes are authorized. Delete and recreate the keypair instead.", state.BasePath.ValueString(), plan.BasePath.ValueString()))
-		return
-	}
+	// base_path and type have RequiresReplace plan modifiers, so Update is only
+	// ever called for metadata/force_destroy changes.
+	privateKeyPath, publicKeyPath := s.keypairPaths(state.BasePath.ValueString())
 
-	if state.Type.ValueString() != plan.Type.ValueString() {
-		resp.Diagnostics.AddError("Error updating keypair", fmt.Sprintf("Invalid type change. Keypair can't have their type changed (old: %s, new: %s). Only metadata changes are authorized. Delete and recreate the keypair instead.", state.Type.ValueString(), plan.Type.ValueString()))
-		return
-	}
-
-	basePath := state.BasePath.ValueString()
-	privateKeyPath, publicKeyPath := s.keypairPaths(basePath)
-
-	metadata := make(map[string]string)
+	// Build base user metadata.
+	userMetadata := make(map[string]string)
 	for k, v := range plan.Metadata.Elements() {
-		metadata[k] = v.(types.String).ValueString()
+		userMetadata[k] = v.(types.String).ValueString()
 	}
-	metadata[SecretTypeMetadata] = state.Type.ValueString()
-	metadata[SecretLengthMetadata] = strconv.Itoa(Curve25519KeySize)
 
-	// Update private key
-	metadata[KeyPairLinkedSecretMetadata] = publicKeyPath
-	metadata[KeyPairPartMetadata] = PrivateKeyPart
+	// Build separate metadata maps for each key to avoid shared-map mutation.
+	privateMetadata := make(map[string]string, len(userMetadata)+4)
+	for k, v := range userMetadata {
+		privateMetadata[k] = v
+	}
+	privateMetadata[SecretTypeMetadata] = state.Type.ValueString()
+	privateMetadata[SecretLengthMetadata] = strconv.Itoa(Curve25519KeySize)
+	privateMetadata[KeyPairLinkedSecretMetadata] = publicKeyPath
+	privateMetadata[KeyPairPartMetadata] = PrivateKeyPart
 
-	err := s.vaultApi.UpdateSecretMetadata(privateKeyPath, metadata)
+	publicMetadata := make(map[string]string, len(userMetadata)+4)
+	for k, v := range userMetadata {
+		publicMetadata[k] = v
+	}
+	publicMetadata[SecretTypeMetadata] = state.Type.ValueString()
+	publicMetadata[SecretLengthMetadata] = strconv.Itoa(Curve25519KeySize)
+	publicMetadata[KeyPairLinkedSecretMetadata] = privateKeyPath
+	publicMetadata[KeyPairPartMetadata] = PublicKeyPart
+
+	err := s.vaultApi.UpdateSecretMetadata(privateKeyPath, privateMetadata)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating secret", fmt.Sprintf("Error while updating metadata for secret %s: %s", privateKeyPath, err.Error()))
 		return
 	}
 
-	// Update public key
-	metadata[KeyPairLinkedSecretMetadata] = privateKeyPath
-	metadata[KeyPairPartMetadata] = PublicKeyPart
-
-	err = s.vaultApi.UpdateSecretMetadata(publicKeyPath, metadata)
+	err = s.vaultApi.UpdateSecretMetadata(publicKeyPath, publicMetadata)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating secret", fmt.Sprintf("Error while updating metadata for secret %s: %s", publicKeyPath, err.Error()))
 		return
@@ -344,13 +353,15 @@ func (s *KeyPairSecret) Delete(ctx context.Context, req resource.DeleteRequest, 
 	err = s.vaultApi.DeleteSecret(publicKeyPath)
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting public key", fmt.Sprintf("Error while deleting secret %s: %s", publicKeyPath, err.Error()))
+		resp.Diagnostics.AddWarning(
+			"Partial deletion: private key already deleted",
+			fmt.Sprintf("Private key at %s was successfully deleted, but the public key at %s could not be deleted and requires manual cleanup in Vault.", privateKeyPath, publicKeyPath),
+		)
 		return
 	}
 }
 
 func (s *KeyPairSecret) keypairPaths(basePath string) (string, string) {
-	if basePath[len(basePath)-1] != '/' {
-		basePath = basePath + "/"
-	}
+	basePath = strings.TrimRight(basePath, "/") + "/"
 	return basePath + PrivateKeyPart, basePath + PublicKeyPart
 }
