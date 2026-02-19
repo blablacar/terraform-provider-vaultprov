@@ -244,12 +244,16 @@ func (s *KeyPairSecret) Read(ctx context.Context, req resource.ReadRequest, resp
 		}
 		additionalMetadata[k] = types.StringValue(v)
 	}
-	mapVal, mapDiags := types.MapValue(types.StringType, additionalMetadata)
-	resp.Diagnostics.Append(mapDiags...)
-	if resp.Diagnostics.HasError() {
-		return
+	if len(additionalMetadata) == 0 {
+		data.Metadata = types.MapNull(types.StringType)
+	} else {
+		mapVal, mapDiags := types.MapValue(types.StringType, additionalMetadata)
+		resp.Diagnostics.Append(mapDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		data.Metadata = mapVal
 	}
-	data.Metadata = mapVal
 
 	// ForceDestroy may be null in state when importing an existing resource
 	if data.ForceDestroy.IsNull() {

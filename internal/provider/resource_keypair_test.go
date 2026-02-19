@@ -89,6 +89,12 @@ func TestAccCurve25519Secret_ErrorCases(t *testing.T) {
 				Config:      testAccExampleCurve25519ResourceConfig("/secret/curve-errtest", "ed25519", "my_team", true),
 				ExpectError: regexp.MustCompile(`value must be one of.*curve25519`),
 			},
+			// Restore a valid config so the framework can cleanly destroy the resource.
+			// After the ExpectError step the state still holds curve-errtest2; applying
+			// this config is a no-op but leaves a valid, plannable config on disk.
+			{
+				Config: testAccExampleCurve25519ResourceConfig("/secret/curve-errtest2", Curve25519KeyPairType, "my_team", true),
+			},
 		},
 	})
 }
@@ -145,9 +151,14 @@ func TestAccCurve25519Secret_TrailingSlashBasePath(t *testing.T) {
 				),
 			},
 			// Read-back after creation must not drift (proves Read() uses keypairPaths too).
+			// force_destroy must match the create step so PlanOnly sees no diff.
 			{
-				Config:   testAccExampleCurve25519ResourceConfig("/secret/curve-slash/", Curve25519KeyPairType, "my_team", true),
+				Config:   testAccExampleCurve25519ResourceConfig("/secret/curve-slash/", Curve25519KeyPairType, "my_team", false),
 				PlanOnly: true,
+			},
+			// Enable force_destroy for cleanup during post-test destroy.
+			{
+				Config: testAccExampleCurve25519ResourceConfig("/secret/curve-slash/", Curve25519KeyPairType, "my_team", true),
 			},
 		},
 	})
@@ -169,13 +180,16 @@ func TestAccCurve25519Secret_NoMetadata(t *testing.T) {
 					resource.TestCheckNoResourceAttr(keypairResourceName, "metadata.%"),
 				),
 			},
-			// Import state must round-trip without drift
+			// Import state must round-trip without drift.
+			// force_destroy is a Terraform-only lifecycle flag not stored in Vault,
+			// so it always resets to false after import and must be excluded from
+			// verification.
 			{
 				ResourceName:                         keypairResourceName,
 				ImportState:                          true,
 				ImportStateVerify:                    true,
 				ImportStateId:                        "/secret/curve-nometa",
-				ImportStateVerifyIgnore:              []string{"id"},
+				ImportStateVerifyIgnore:              []string{"id", "force_destroy"},
 				ImportStateVerifyIdentifierAttribute: "base_path",
 			},
 		},
