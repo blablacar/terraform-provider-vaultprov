@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	vaultapi "github.com/blablacar/terraform-provider-vaultprov/internal/vault"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -50,7 +51,7 @@ func (p *vaultSecretProvider) DataSources(ctx context.Context) []func() datasour
 
 func (p *vaultSecretProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		NewRandomSecret,
+		NewRandomSecret, NewKeyPairSecret,
 	}
 }
 
